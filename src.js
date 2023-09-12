@@ -3,7 +3,7 @@ const RSS = 'https://rss.app/feeds/v1.1/aHyfxxgGbcce8w3J.json';
 const dateToString = d => 
   d.getFullYear() + 
   '-' + 
-  (d.getMonth() + '').padStart(2, 0) + 
+  (d.getMonth() + 1 + '').padStart(2, 0) + 
   '-' + 
   (d.getDate() + '').padStart(2, 0) + 
   ' 오'+(d.getHours() >= 12? '후' : '전') + 
@@ -84,8 +84,8 @@ try {
   rooms = FileStream.read('/sdcard/rooms.txt').split('\n');
 } catch (e) {}
 let recentId = FileStream.read('/sdcard/recentId.txt');
-const interval = setInterval(() => {
-  Log.d('최신 게시글 확인 중...');
+const check = () => {
+  //Log.d('최신 게시글 확인 중...');
   parseRSS(
     items => {
       if (items[0].id != recentId) {
@@ -93,18 +93,27 @@ const interval = setInterval(() => {
         recentId = items[0].id;
         Log.d('게시글 올라옴: ' + recentId);
         FileStream.write('/sdcard/recentId.txt', recentId);
-        rooms.map(e => 
-          Api.replyRoom(
+        const send = rooms.reduce((c, e) => 
+          ((Api.replyRoom(
             e, 
             '새 글이 올라왔습니다!\n' + 
             processItem(items[0])
-          )
+          ) || c.push(e)), c), 
+          []
         );
+        if (send.length) {
+          Log.e(
+            '알림 전송 실패:\n' + 
+            send.join('\n')
+          );
+        }
       }
     }, 
     err => errorHandler(null, err)
   );
-}, 2 * 60000);
+};
+const delay = 2 * 60000; //최신글 확인 간격
+let interval = setInterval(check, delay);
 const modifyRooms = true; //챗으로 방 목록을 수정할 수 있는지에 대한 여부
 function response(room, msg, sender, isGroupChat, replier, imageDB, packageName) {
   try {
@@ -186,10 +195,40 @@ function save() {
 }
 
 function onStartCompile() {
-  clearInterval(interval);
+  interval && clearInterval(interval);
+  interval = null;
 }
 
-function onCreate(savedInstanceState, activity) {}
+function onCreate(savedInstanceState, activity) {
+  let button = new android.widget.Button(activity);
+  const toggle = () => {
+    if (interval) {
+      clearInterval(interval);
+      interval = null;
+    } else {
+      interval = setInterval(check, delay);
+    }
+    refresh();
+  };
+  const refresh = () => {
+    button.text = 
+      '인터벌 ' + 
+      (interval
+        ? '중지'
+        : '시작'
+      );
+    const Color = android.graphics.Color;
+    button.backgroundColor = interval
+      ? Color.RED 
+      : Color.GREEN;
+    button.textColor = interval
+      ? Color.WHITE 
+      : Color.BLACK;
+  };
+  button.onClickListener = toggle;
+  activity.setContentView(button);
+  refresh();
+}
 
 function onStart(activity) {}
 
